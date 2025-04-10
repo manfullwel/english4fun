@@ -1,0 +1,802 @@
+# Carrega os Pacotes Necessários
+library(shiny)
+library(bslib)
+library(DT)
+library(shinyjs)
+library(RSQLite)
+library(fontawesome)
+library(shinyWidgets)
+library(magick)
+library(shinyvalidate)
+library(digest)
+library(shinyFeedback)
+library(ggplot2)
+library(plotly)
+library(htmltools)
+
+# Configura o Tema Vibrante Usando bslib
+theme <- bs_theme(
+  version = 4,
+  bootswatch = "lux",
+  bg = "#0f0c29",
+  fg = "#e0e0e0",
+  primary = "#ff4e50",
+  secondary = "#f9d423",
+  base_font = font_google("Roboto"),
+  heading_font = font_google("Bebas Neue"),
+  font_scale = NULL
+)
+
+# Funções de Banco de Dados
+db_file <- "app_data.sqlite"
+
+connectDB <- function() {
+  dbConnect(SQLite(), dbname = db_file)
+}
+
+initializeDB <- function() {
+  conn <- connectDB()
+  dbExecute(conn, "CREATE TABLE IF NOT EXISTS materials (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Nome TEXT,
+    Categoria TEXT,
+    Link TEXT
+  )")
+  dbExecute(conn, "CREATE TABLE IF NOT EXISTS comments (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Data TEXT,
+    Nome TEXT,
+    Pais TEXT,
+    Comentario TEXT
+  )")
+  dbExecute(conn, "CREATE TABLE IF NOT EXISTS messages (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Data TEXT,
+    Nome TEXT,
+    Email TEXT,
+    Mensagem TEXT
+  )")
+  dbDisconnect(conn)
+}
+
+saveData <- function(data, table_name) {
+  conn <- connectDB()
+  dbAppendTable(conn, table_name, data)
+  dbDisconnect(conn)
+}
+
+loadData <- function(table_name) {
+  conn <- connectDB()
+  if (table_name %in% dbListTables(conn)) {
+    data <- dbReadTable(conn, table_name)
+  } else {
+    data <- NULL
+  }
+  dbDisconnect(conn)
+  data
+}
+
+initializeDB()
+
+# Função para Sanitizar Texto
+sanitize_text <- function(text) {
+  text <- gsub("<.*?>", "", text)
+  text <- gsub("[\r\n]", " ", text)
+  text
+}
+
+# Módulo de Comentários
+commentsModuleUI <- function(id) {
+  ns <- NS(id)
+  tagList(
+    fluidRow(
+      column(6,
+             h3("Deixe Seu Comentário", class = "mb-4"),
+             textInput(ns("comment_name"), "Seu Nome:"),
+             textAreaInput(ns("comment_input"), "Escreva seu comentário aqui (máx 150 caracteres):", "", rows = 5),
+             actionButton(ns("submit_comment"), "Enviar Comentário", class = "btn btn-glow mt-3"),
+             br(),
+             div(style = "color: #fff;", textOutput(ns("comment_msg")))
+      ),
+      column(6,
+             h3("Comentários Recentes", class = "mb-4"),
+             DTOutput(ns("comments_table"))
+      )
+    )
+  )
+}
+
+commentsModuleServer <- function(id, rv) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
+    # Validação de Comentários
+    iv_comment <- InputValidator$new()
+    iv_comment$add_rule(ns("comment_name"), sv_required(message = "Por favor, insira seu nome."))
+    iv_comment$add_rule(ns("comment_input"), sv_required(message = "Por favor, insira um comentário."))
+    iv_comment$add_rule(ns("comment_input"), function(value) {
+      if (nchar(value) > 150) {
+        "O comentário não pode exceder 150 caracteres."
+      } else {
+        NULL
+      }
+    })
+    iv_comment$enable()
+    
+    # Processa o Envio de Comentários
+    observeEvent(input$submit_comment, {
+      if (iv_comment$is_valid()) {
+        new_comment <- data.frame(
+          Nome = sanitize_text(input$comment_name),
+          Pais = "Brasil",
+          Comentario = sanitize_text(input$comment_input),
+          Data = format(Sys.time(), "%d/%m/%Y %H:%M:%S"),
+          stringsAsFactors = FALSE
+        )
+        saveData(new_comment, "comments")
+        rv$comments <- loadData("comments")
+        output$comment_msg <- renderText("Obrigado pelo seu comentário!")
+        updateTextInput(session, "comment_name", value = "")
+        updateTextAreaInput(session, "comment_input", value = "")
+      } else {
+        output$comment_msg <- renderText("Por favor, corrija os erros no formulário.")
+      }
+    })
+    
+    # Tabela de Comentários
+    output$comments_table <- renderDT({
+      datatable(
+        rv$comments[, c("Data", "Nome", "Pais", "Comentario")],
+        options = list(
+          pageLength = 5,
+          autoWidth = TRUE,
+          responsive = TRUE
+        ),
+        rownames = FALSE
+      )
+    })
+  })
+}
+
+# Interface do Usuário
+ui <- fluidPage(
+  theme = theme,
+  useShinyjs(),
+  useShinyFeedback(),
+  tags$head(
+    # Inclui CSS Personalizado
+    tags$style(HTML("
+      body {
+        background: linear-gradient(45deg, #0f0c29, #302b63, #24243e);
+        background-size: 600% 600%;
+        animation: GradientBackground 15s ease infinite;
+        font-size: 1rem;
+      }
+      @keyframes GradientBackground {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .neon-text {
+        color: #fff;
+        text-align: center;
+        font-size: 6vw;
+        text-shadow:
+          0 0 5px #fff,
+          0 0 10px #fff,
+          0 0 20px #ff4e50,
+          0 0 30px #ff4e50,
+          0 0 40px #ff4e50,
+          0 0 55px #ff4e50,
+          0 0 75px #ff4e50;
+      }
+      .navbar-nav > li > a {
+        color: #fff !important;
+        font-size: 1.1rem;
+        background-color: transparent;
+      }
+      .navbar-nav > li > a:hover {
+        background-color: #ff4e50 !important;
+      }
+      .navbar-brand {
+        color: #fff !important;
+        font-size: 1.5rem;
+      }
+      @media (max-width: 768px) {
+        .neon-text {
+          font-size: 8vw;
+        }
+        .navbar-brand {
+          font-size: 1.2rem;
+        }
+        .navbar-nav > li > a {
+          font-size: 1rem;
+        }
+      }
+    ")),
+    # Smooth Scroll JS
+    tags$script(HTML("
+      $(document).ready(function(){
+        $('a[href^=\"#\"]').on('click', function(event) {
+          var target = $(this.getAttribute('href'));
+          if( target.length ) {
+            event.preventDefault();
+            $('html, body').stop().animate({
+              scrollTop: target.offset().top
+            }, 1000);
+          }
+        });
+      });
+    "))
+  ),
+  # Barra de Navegação
+  navbarPage(
+    title = div(class = "neon-text", "GREATEST SHOW ENGLISH 365"),
+    windowTitle = "GREATEST SHOW ENGLISH 365",
+    id = "navbar",
+    collapsible = TRUE,
+    inverse = TRUE,
+    header = tags$script(HTML("
+      $(document).on('click', '.navbar-collapse.show', function(e) {
+        if ($(e.target).is('a')) {
+          $(this).collapse('hide');
+        }
+      });
+    ")),
+    # Aba Inicial (Ajuste do Nome)
+    tabPanel("Bem-vindo",
+             value = "inicio",
+             div(class = "hero-section",
+                 div(class = "hero-content",
+                     h1(class = "neon-text", "A magia de aprender ENGLISH!"),
+                     p(style = "color: #fff; font-size: 1.5em;",
+                       "Embarque em uma jornada encantadora de 365 dias e transforme seu inglês de forma mágica."
+                     ),
+                     actionButton("join_us", "Junte-se a Nós!", class = "btn btn-glow btn-lg"),
+                     br(), br(),
+                     # Frases Motivacionais
+                     p(style = "font-size: 1.5em; color: #fff;", textOutput("motivational_phrase_en")),
+                     p(style = "font-size: 1.5em; color: #fff;", textOutput("motivational_phrase_pt"))
+                 )
+             )
+    ),
+    # Aba Sobre o Projeto
+    tabPanel("Sobre o Projeto",
+             value = "sobre_projeto",
+             div(class = "section",
+                 h2("O que é o Greatest Show English 365?", class = "text-center mb-5 neon-text"),
+                 p(style = "color: #fff; font-size: 1.2em;",
+                   "O Greatest Show English 365 é um projeto inovador que oferece uma jornada de 365 dias para transformar seu inglês de forma mágica. Nossa missão é fornecer recursos acessíveis e eficazes para ajudar você a alcançar fluência no idioma."
+                 ),
+                 # Imagem Ilustrativa
+                 img(src = "images/project_image.jpg", class = "img-fluid mb-4", style = "border: 2px solid #fff;"),
+                 # Vídeo Incorporado
+                 tags$iframe(src = "https://www.youtube.com/embed/SEU_VIDEO_ID", width = "100%", height = "400px")
+             )
+    ),
+    # Aba Nossa Equipe
+    tabPanel("Nossa Equipe",
+             value = "nossa_equipe",
+             div(class = "section",
+                 h2("Conheça a Nossa Equipe", class = "text-center mb-5 neon-text"),
+                 fluidRow(
+                   column(4,
+                          div(class = "team-member text-center",
+                              uiOutput("igor_image"),
+                              h3("Igor", style = "color: #fff;"),
+                              p("Brasileiro, desenvolvedor do projeto.", style = "color: #fff;")
+                          )
+                   ),
+                   column(4,
+                          div(class = "team-member text-center",
+                              uiOutput("liz_image"),
+                              h3("Liz", style = "color: #fff;"),
+                              p("Americana, especialista em ensino de inglês.", style = "color: #fff;")
+                          )
+                   ),
+                   column(4,
+                          div(class = "team-member text-center",
+                              uiOutput("magiq_image"),
+                              h3("Magiq", style = "color: #fff;"),
+                              p("Marroquino, colaborador dedicado.", style = "color: #fff;")
+                          )
+                   )
+                 )
+             )
+    ),
+    # Aba Materiais Gratuitos
+    tabPanel("Materiais Gratuitos",
+             value = "materiais_gratuitos",
+             div(class = "section",
+                 h2("Materiais Gratuitos", class = "text-center mb-5 neon-text"),
+                 DTOutput("materials_table")
+             )
+    ),
+    # Aba Comentários
+    tabPanel("Comentários",
+             value = "comentarios",
+             div(class = "section",
+                 commentsModuleUI("comments_module")
+             )
+    ),
+    # Aba Torne-se um Poliglota
+    tabPanel("Torne-se um Poliglota",
+             value = "torne_se_poliglota",
+             div(class = "section",
+                 h2("Dicas para se Tornar um Poliglota", class = "text-center mb-5 neon-text"),
+                 p(style = "color: #fff; font-size: 1.2em;",
+                   "Aprender múltiplos idiomas abre portas para novas culturas e oportunidades. Aqui estão alguns recursos para ajudá-lo nessa jornada:"
+                 ),
+                 tags$ul(
+                   tags$li(a(href = "https://www.polyglotclub.com", target = "_blank", "Polyglot Club - Conecte-se com outros aprendizes"), style = "color: #fff;"),
+                   tags$li(a(href = "https://www.language-exchanges.org", target = "_blank", "The Mixxer - Troque idiomas com nativos"), style = "color: #fff;"),
+                   tags$li(a(href = "https://www.memrise.com", target = "_blank", "Memrise - Aprendizado com flashcards"), style = "color: #fff;")
+                 ),
+                 # Dicas Adicionais
+                 h3("Estratégias Eficazes", style = "color: #fff;"),
+                 p("1. Estabeleça metas claras e realistas.", style = "color: #fff;"),
+                 p("2. Pratique regularmente com falantes nativos.", style = "color: #fff;"),
+                 p("3. Utilize recursos multimídia como filmes e música.", style = "color: #fff;")
+             )
+    ),
+    # Aba Estatísticas
+    tabPanel("Estatísticas",
+             value = "estatisticas",
+             div(class = "section",
+                 h2("Estatísticas de Aprendizado de Idiomas", class = "text-center mb-5 neon-text"),
+                 plotlyOutput("language_plot")
+             )
+    ),
+    # Aba Contato
+    tabPanel("Contato",
+             value = "contato",
+             div(class = "section",
+                 fluidRow(
+                   column(6,
+                          h3("Envie uma Mensagem", class = "mb-4", style = "color: #fff;"),
+                          textInput("name", "Nome:"),
+                          textInput("email", "Email:"),
+                          textAreaInput("message", "Mensagem:", "", rows = 5),
+                          actionButton("send_message", "Enviar", class = "btn btn-glow mt-3"),
+                          br(),
+                          div(style = "color: #fff;", textOutput("contact_msg"))
+                   ),
+                   column(6,
+                          h3("Apoie o Projeto", class = "mb-4", style = "color: #fff;"),
+                          p("Se você gostou do nosso conteúdo e deseja apoiar o projeto, considere fazer uma doação.", style = "color: #fff;"),
+                          h4("PIX:", style = "color: #fff;"),
+                          p("Chave PIX: sua_chave_pix_aqui", style = "color: #fff;"),
+                          h4("PayPal:", style = "color: #fff;"),
+                          p("Você pode fazer uma doação via PayPal clicando no botão abaixo:", style = "color: #fff;"),
+                          tags$a(href = "https://www.paypal.com/donate?hosted_button_id=SEU_ID_DO_PAYPAL", target = "_blank",
+                                 tags$img(src = "https://www.paypalobjects.com/webstatic/en_US/i/buttons/PP_logo_h_150x38.png", height = "26")
+                          ),
+                          h4("Entre em Contato:", style = "color: #fff;"),
+                          p("Nome: Igor", style = "color: #fff;"),
+                          p("Email: ", a(href = "mailto:seu_email@example.com", "seu_email@example.com"), style = "color: #fff;")
+                   )
+                 )
+             )
+    ),
+    # Aba Administração
+    tabPanel("Administração",
+             value = "administracao",
+             div(class = "section",
+                 h2("Área Administrativa", class = "text-center mb-5 neon-text"),
+                 uiOutput("admin_ui")
+             )
+    )
+  ),
+  # Rodapé
+  div(class = "footer text-center",
+      div(class = "container",
+          div(class = "row",
+              div(class = "col-md-6 mb-3 mb-md-0",
+                  p("© 2024 GREATEST SHOW ENGLISH 365. Todos os direitos reservados.", style = "color: #fff;")
+              ),
+              div(class = "col-md-6",
+                  a(href = "https://facebook.com/seu_perfil", icon("facebook"), target = "_blank", style = "color: #fff; font-size: 24px; margin-right: 15px;"),
+                  a(href = "https://twitter.com/seu_perfil", icon("twitter"), target = "_blank", style = "color: #fff; font-size: 24px; margin-right: 15px;"),
+                  a(href = "https://instagram.com/seu_perfil", icon("instagram"), target = "_blank", style = "color: #fff; font-size: 24px;")
+              )
+          )
+      )
+  )
+)
+
+# Lógica do Servidor
+server <- function(input, output, session) {
+  # Carrega os Dados Iniciais
+  materials_data <- loadData("materials")
+  if (is.null(materials_data)) {
+    materials_data <- data.frame(
+      ID = integer(),
+      Nome = character(),
+      Categoria = character(),
+      Link = character(),
+      stringsAsFactors = FALSE
+    )
+  }
+  comments_data <- loadData("comments")
+  if (is.null(comments_data)) {
+    comments_data <- data.frame(
+      ID = integer(),
+      Data = character(),
+      Nome = character(),
+      Pais = character(),
+      Comentario = character(),
+      stringsAsFactors = FALSE
+    )
+  }
+  messages_data <- loadData("messages")
+  if (is.null(messages_data)) {
+    messages_data <- data.frame(
+      ID = integer(),
+      Data = character(),
+      Nome = character(),
+      Email = character(),
+      Mensagem = character(),
+      stringsAsFactors = FALSE
+    )
+  }
+  # Reactive Values
+  rv <- reactiveValues(
+    materials = materials_data,
+    comments = comments_data,
+    messages = messages_data
+  )
+  
+  # Frases Motivacionais em Inglês
+  motivational_phrases_en <- c(
+    "\"The best way to predict the future is to create it.\" - Peter Drucker",
+    "\"Believe you can and you're halfway there.\" - Theodore Roosevelt",
+    "\"Success is not final, failure is not fatal: It is the courage to continue that counts.\" - Winston Churchill",
+    "\"Your time is limited, don't waste it living someone else's life.\" - Steve Jobs",
+    "\"The only way to do great work is to love what you do.\" - Steve Jobs"
+  )
+  
+  # Frases Motivacionais em Português
+  motivational_phrases_pt <- c(
+    "\"A persistência é o caminho do êxito.\" - Charles Chaplin",
+    "\"Só se pode alcançar um grande êxito quando nos mantemos fiéis a nós mesmos.\" - Friedrich Nietzsche",
+    "\"O sucesso nasce do querer, da determinação e persistência em se chegar a um objetivo.\" - Ayrton Senna",
+    "\"Determinação, coragem e autoconfiança são fatores decisivos para o sucesso.\" - Dalai Lama",
+    "\"Imagine uma nova história para sua vida e acredite nela.\" - Paulo Coelho"
+  )
+  
+  # Frase Motivacional Aleatória em Inglês
+  output$motivational_phrase_en <- renderText({
+    sample(motivational_phrases_en, 1)
+  })
+  
+  # Frase Motivacional Aleatória em Português
+  output$motivational_phrase_pt <- renderText({
+    sample(motivational_phrases_pt, 1)
+  })
+  
+  # Tabela de Materiais
+  output$materials_table <- renderDT({
+    datatable(
+      rv$materials[, c("Nome", "Categoria", "Link")],
+      escape = FALSE,
+      rownames = FALSE,
+      selection = 'none',
+      options = list(
+        pageLength = 10,
+        autoWidth = TRUE,
+        responsive = TRUE,
+        columnDefs = list(list(
+          targets = 2,
+          render = JS(
+            "function(data, type, row, meta) {",
+            "return type === 'display' && data != null && data != '' ?",
+            "'<a href=\"' + data + '\" target=\"_blank\">Baixar</a>' : '';",
+            "}"
+          )
+        ))
+      )
+    )
+  })
+  
+  # Chama o Módulo de Comentários
+  commentsModuleServer("comments_module", rv)
+  
+  # Validação de Mensagens de Contato
+  iv_contact <- InputValidator$new()
+  iv_contact$add_rule("name", sv_required(message = "Por favor, insira seu nome."))
+  iv_contact$add_rule("email", sv_required(message = "Por favor, insira seu email."))
+  iv_contact$add_rule("email", sv_email(message = "Por favor, insira um email válido."))
+  iv_contact$add_rule("message", sv_required(message = "Por favor, insira uma mensagem."))
+  iv_contact$add_rule("message", function(value) {
+    if (nchar(value) > 500) {
+      "A mensagem não pode exceder 500 caracteres."
+    } else {
+      NULL
+    }
+  })
+  iv_contact$enable()
+  
+  # Processa o Envio de Mensagens de Contato
+  observeEvent(input$send_message, {
+    if (iv_contact$is_valid()) {
+      new_message <- data.frame(
+        Nome = sanitize_text(input$name),
+        Email = sanitize_text(input$email),
+        Mensagem = sanitize_text(input$message),
+        Data = format(Sys.time(), "%d/%m/%Y %H:%M:%S"),
+        stringsAsFactors = FALSE
+      )
+      saveData(new_message, "messages")
+      rv$messages <- loadData("messages")
+      output$contact_msg <- renderText("Obrigado por entrar em contato! Retornaremos em breve.")
+      updateTextInput(session, "name", value = "")
+      updateTextInput(session, "email", value = "")
+      updateTextAreaInput(session, "message", value = "")
+    } else {
+      output$contact_msg <- renderText("Por favor, corrija os erros no formulário.")
+    }
+  })
+  
+  # Autenticação do Administrador
+  user_authenticated <- reactiveVal(FALSE)
+  admin_password_hash <- Sys.getenv("ADMIN_PASSWORD_HASH")
+  
+  observeEvent(input$login_button, {
+    input_password_hash <- digest(input$password, algo = "sha256")
+    if (input$username == "admin" && input_password_hash == admin_password_hash) {
+      user_authenticated(TRUE)
+      output$login_msg <- renderText("")
+    } else {
+      output$login_msg <- renderText("Usuário ou senha incorretos.")
+    }
+  })
+  
+  # UI do Administrador
+  output$admin_ui <- renderUI({
+    if (user_authenticated()) {
+      tabsetPanel(
+        tabPanel("Materiais",
+                 h3("Adicionar Novo Material", style = "color: #fff;"),
+                 textInput("material_name", "Nome do Material:"),
+                 selectInput("material_category", "Categoria:", choices = c("Histórias", "Artigos", "Aulas Interativas")),
+                 textInput("material_link", "Link Público do Google Drive:"),
+                 actionButton("add_material", "Adicionar", class = "btn btn-success"),
+                 br(), br(),
+                 h3("Gerenciar Materiais", style = "color: #fff;"),
+                 DTOutput("admin_materials_table")
+        ),
+        tabPanel("Comentários",
+                 h3("Gerenciar Comentários", style = "color: #fff;"),
+                 DTOutput("admin_comments_table")
+        ),
+        tabPanel("Mensagens de Contato",
+                 h3("Mensagens Recebidas", style = "color: #fff;"),
+                 DTOutput("admin_messages_table")
+        ),
+        tabPanel("Sair",
+                 actionButton("logout_button", "Sair", class = "btn btn-danger")
+        )
+      )
+    } else {
+      fluidPage(
+        h3("Login do Administrador", style = "color: #fff;"),
+        textInput("username", "Usuário:"),
+        passwordInput("password", "Senha:"),
+        actionButton("login_button", "Login", class = "btn btn-success"),
+        div(style = "color: #fff;", textOutput("login_msg"))
+      )
+    }
+  })
+  
+  # Processa o Logout
+  observeEvent(input$logout_button, {
+    user_authenticated(FALSE)
+  })
+  
+  # Validação de Materiais
+  iv_material <- InputValidator$new()
+  iv_material$add_rule("material_name", sv_required(message = "Por favor, insira o nome do material."))
+  iv_material$add_rule("material_link", sv_required(message = "Por favor, insira o link do material."))
+  iv_material$enable()
+  
+  # Adiciona Novo Material
+  observeEvent(input$add_material, {
+    if (iv_material$is_valid()) {
+      new_material <- data.frame(
+        Nome = sanitize_text(input$material_name),
+        Categoria = sanitize_text(input$material_category),
+        Link = sanitize_text(input$material_link),
+        stringsAsFactors = FALSE
+      )
+      saveData(new_material, "materials")
+      rv$materials <- loadData("materials")
+      showNotification("Material adicionado com sucesso!", type = "message")
+      updateTextInput(session, "material_name", value = "")
+      updateTextInput(session, "material_link", value = "")
+    } else {
+      showNotification("Por favor, corrija os erros no formulário.", type = "error")
+    }
+  })
+  
+  # Tabela de Materiais na Administração
+  output$admin_materials_table <- renderDT({
+    datatable(
+      rv$materials,
+      escape = FALSE,
+      rownames = FALSE,
+      options = list(
+        pageLength = 10,
+        autoWidth = TRUE,
+        responsive = TRUE,
+        columnDefs = list(
+          list(
+            targets = ncol(rv$materials),
+            data = NULL,
+            defaultContent = '<button class="btn btn-danger btn-sm delete-material-btn">Excluir</button>',
+            orderable = FALSE
+          )
+        )
+      ),
+      callback = JS("
+        table.on('click', '.delete-material-btn', function() {
+          var data = table.row($(this).parents('tr')).data();
+          Shiny.setInputValue('delete_material', data[0], {priority: 'event'});
+        });
+      ")
+    )
+  })
+  
+  # Processa a Exclusão de Materiais
+  observeEvent(input$delete_material, {
+    conn <- connectDB()
+    dbExecute(conn, "DELETE FROM materials WHERE ID = ?", params = list(input$delete_material))
+    dbDisconnect(conn)
+    rv$materials <- loadData("materials")
+    showNotification("Material excluído com sucesso!", type = "message")
+  })
+  
+  # Tabela de Comentários na Administração
+  output$admin_comments_table <- renderDT({
+    datatable(
+      rv$comments,
+      options = list(
+        pageLength = 10,
+        autoWidth = TRUE,
+        responsive = TRUE,
+        columnDefs = list(
+          list(
+            targets = ncol(rv$comments),
+            data = NULL,
+            defaultContent = '<button class="btn btn-danger btn-sm delete-comment-btn">Excluir</button>',
+            orderable = FALSE
+          )
+        )
+      ),
+      callback = JS("
+        table.on('click', '.delete-comment-btn', function() {
+          var data = table.row($(this).parents('tr')).data();
+          Shiny.setInputValue('delete_comment', data[0], {priority: 'event'});
+        });
+      ")
+    )
+  })
+  
+  # Processa a Exclusão de Comentários
+  observeEvent(input$delete_comment, {
+    conn <- connectDB()
+    dbExecute(conn, "DELETE FROM comments WHERE ID = ?", params = list(input$delete_comment))
+    dbDisconnect(conn)
+    rv$comments <- loadData("comments")
+    showNotification("Comentário excluído com sucesso!", type = "message")
+  })
+  
+  # Tabela de Mensagens na Administração
+  output$admin_messages_table <- renderDT({
+    datatable(
+      rv$messages,
+      options = list(
+        pageLength = 10,
+        autoWidth = TRUE,
+        responsive = TRUE,
+        columnDefs = list(
+          list(
+            targets = ncol(rv$messages),
+            data = NULL,
+            defaultContent = '<button class="btn btn-danger btn-sm delete-message-btn">Excluir</button>',
+            orderable = FALSE
+          )
+        )
+      ),
+      callback = JS("
+        table.on('click', '.delete-message-btn', function() {
+          var data = table.row($(this).parents('tr')).data();
+          Shiny.setInputValue('delete_message', data[0], {priority: 'event'});
+        });
+      ")
+    )
+  })
+  
+  # Processa a Exclusão de Mensagens
+  observeEvent(input$delete_message, {
+    conn <- connectDB()
+    dbExecute(conn, "DELETE FROM messages WHERE ID = ?", params = list(input$delete_message))
+    dbDisconnect(conn)
+    rv$messages <- loadData("messages")
+    showNotification("Mensagem excluída com sucesso!", type = "message")
+  })
+  
+  # Redireciona o Botão "Junte-se a Nós" para a Aba "Contato"
+  observeEvent(input$join_us, {
+    updateNavbarPage(session, "navbar", selected = "Contato")
+  })
+  
+  # Carrega e Redimensiona as Imagens dos Membros da Equipe
+  output$igor_image <- renderUI({
+    img_src <- "images/igor.jpg"
+    img_path <- file.path("www", img_src)
+    if (file.exists(img_path)) {
+      img_resized <- image_read(img_path) %>%
+        image_resize("150x150^") %>%
+        image_crop("150x150+0+0")
+      image_write(img_resized, path = file.path("www", "igor_resized.jpg"))
+      tags$img(src = "igor_resized.jpg", alt = "Foto de Igor", class = "img-fluid rounded-circle", style = "border: 2px solid #fff;")
+    } else {
+      tags$img(src = "https://via.placeholder.com/150", alt = "Foto de Igor", class = "img-fluid rounded-circle", style = "border: 2px solid #fff;")
+    }
+  })
+  
+  output$liz_image <- renderUI({
+    img_src <- "images/liz.jpg"
+    img_path <- file.path("www", img_src)
+    if (file.exists(img_path)) {
+      img_resized <- image_read(img_path) %>%
+        image_resize("150x150^") %>%
+        image_crop("150x150+0+0")
+      image_write(img_resized, path = file.path("www", "liz_resized.jpg"))
+      tags$img(src = "liz_resized.jpg", alt = "Foto de Liz", class = "img-fluid rounded-circle", style = "border: 2px solid #fff;")
+    } else {
+      tags$img(src = "https://via.placeholder.com/150", alt = "Foto de Liz", class = "img-fluid rounded-circle", style = "border: 2px solid #fff;")
+    }
+  })
+  
+  output$magiq_image <- renderUI({
+    img_src <- "images/magiq.jpg"
+    img_path <- file.path("www", img_src)
+    if (file.exists(img_path)) {
+      img_resized <- image_read(img_path) %>%
+        image_resize("150x150^") %>%
+        image_crop("150x150+0+0")
+      image_write(img_resized, path = file.path("www", "magiq_resized.jpg"))
+      tags$img(src = "magiq_resized.jpg", alt = "Foto de Magiq", class = "img-fluid rounded-circle", style = "border: 2px solid #fff;")
+    } else {
+      tags$img(src = "https://via.placeholder.com/150", alt = "Foto de Magiq", class = "img-fluid rounded-circle", style = "border: 2px solid #fff;")
+    }
+  })
+  
+  # Dados para o Gráfico de Estatísticas de Aprendizado
+  language_data <- data.frame(
+    Idioma = c("Inglês", "Espanhol", "Francês", "Alemão", "Mandarim", "Japonês", "Italiano"),
+    Estudantes = c(50000, 35000, 20000, 15000, 12000, 8000, 6000)
+  )
+  
+  # Gráfico Interativo Usando Plotly (Correção do Gráfico)
+  output$language_plot <- renderPlotly({
+    p <- ggplot(language_data, aes(x = reorder(Idioma, -Estudantes), y = Estudantes, text = paste("Idioma:", Idioma, "<br>Estudantes:", Estudantes))) +
+      geom_bar(stat = "identity", fill = "#f9d423") +
+      theme_minimal() +
+      labs(title = "Número de Estudantes por Idioma", x = "Idioma", y = "Número de Estudantes") +
+      theme(
+        plot.title = element_text(color = "#fff", size = 20, hjust = 0.5),
+        axis.title = element_text(color = "#fff", size = 14),
+        axis.text = element_text(color = "#fff"),
+        panel.background = element_rect(fill = "transparent", color = NA),
+        plot.background = element_rect(fill = "transparent", color = NA),
+        panel.grid.major = element_line(color = "gray70"),
+        panel.grid.minor = element_line(color = "gray80")
+      )
+    ggplotly(p, tooltip = "text") %>% layout(plot_bgcolor = 'transparent', paper_bgcolor = 'transparent')
+  })
+}
+
+# Executa o Aplicativo
+shinyApp(ui = ui, server = server)

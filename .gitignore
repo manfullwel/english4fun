@@ -26,4 +26,18 @@ yarn-debug.log*
 yarn-error.log*
 
 # Diretórios de dependências
-node_modules/ 
+node_modules/
+
+# Arquivos Vercel
+.vercel
+.next
+out
+
+# Arquivos de cache
+.cache
+.npm
+.eslintcache
+
+# Arquivos de build
+dist
+build 
