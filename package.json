@@ -1,18 +1,15 @@
 {
-  "name": "english-classes-website",
+  "name": "english4fun",
   "version": "1.0.0",
-  "description": "Website for English classes with quiz feature",
-  "main": "index.html",
+  "private": true,
   "scripts": {
-    "start": "serve",
-    "build": "echo 'No build step required'"
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod"
   },
   "dependencies": {
-    "@emailjs/browser": "^3.11.0",
-    "chart.js": "^4.4.1",
-    "serve": "^14.2.1"
+    "@vercel/node": "^2.15.1"
   },
   "devDependencies": {
     "vercel": "^32.5.0"
   }
-} 
+}

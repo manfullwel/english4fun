@@ -1,7 +1,6 @@
 {
   "version": 2,
   "public": true,
-  "outputDirectory": "public",
   "builds": [
     {
       "src": "public/**",
@@ -12,10 +11,6 @@
     {
       "src": "/(.*)",
       "dest": "/public/$1"
-    },
-    {
-      "src": "/",
-      "dest": "/public/index.html"
     }
   ]
-} 
+}

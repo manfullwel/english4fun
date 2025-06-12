@@ -1,1 +1,11 @@
 * [32mmaster[m
+{
+  "dependencies": {
+    "@emailjs/browser": "^3.11.0",
+    "chart.js": "^4.4.1",
+    "serve": "^14.2.1"
+  },
+  "devDependencies": {
+    "vercel": "^32.5.0"
+  }
+}
