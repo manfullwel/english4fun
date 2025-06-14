@@ -18,6 +18,12 @@
     
     <!-- Custom CSS -->
     <style>
+        @font-face {
+  font-family: 'Decoy Bold';
+  src: url('fonts/Decoy-Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
         /* Global Styles */
         :root {
             --primary-color: #00bc8c;
@@ -74,12 +80,15 @@
         }
 
         #hero h1 {
-            font-size: 3rem;
-            margin-bottom: 20px;
-            color: var(--light-text);
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-            animation: fadeInDown 1s ease-out;
-        }
+  font-family: 'Decoy Bold', 'Montserrat', sans-serif;
+  font-size: 3rem;
+  font-weight: bold;
+  background: linear-gradient(90deg, #d9d9d9 0%, #00bc8c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+}
 
         #hero p {
             font-size: 1.2rem;
@@ -428,6 +437,28 @@
                 padding: 40px 15px;
             }
         }
+
+        .logo-title {
+  font-family: 'Decoy Bold', 'Montserrat', sans-serif;
+  font-size: 3rem;
+  font-weight: bold;
+  background: linear-gradient(90deg, #d9d9d9 0%, #00bc8c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  letter-spacing: 2px;
+  display: inline-block;
+}
+.logo-highlight {
+  color: #00bc8c;
+  background: none;
+  -webkit-text-fill-color: #00bc8c;
+  text-fill-color: #00bc8c;
+}
+.logo-img {
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+}
     </style>
     
     <!-- EmailJS -->
@@ -482,7 +513,10 @@
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-lg-8 text-center">
-                    <h1 class="display-4 mb-4">ENGLISH 4FUN</h1>
+                    <div class="d-flex flex-column flex-md-row align-items-center justify-content-center mb-4 gap-3">
+  <img src="img/english4fun.png" alt="Logo English4Fun" class="logo-img" style="max-width:120px; height:auto;">
+  <span class="logo-title">ENGLISH<span class="logo-highlight">4FUN</span></span>
+</div>
                     <p class="lead mb-3">"From my grandmother's inspiration to mastering 5 languages - Let me guide you through this amazing journey of learning English in a fun and effective way!"</p>
                     <p class="mb-5">Transforme seu aprendizado em uma experiência única e divertida</p>
                     <button class="btn btn-success btn-lg" id="cta-hero-btn">Comece Sua Jornada Agora - Aula Experimental Grátis!</button>
